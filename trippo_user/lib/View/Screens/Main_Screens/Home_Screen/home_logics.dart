@@ -3,7 +3,8 @@ import 'dart:io';
 import 'package:elegant_notification/elegant_notification.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:geocoder2/geocoder2.dart';
+// import 'package:geocoder2/geocoder2.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -86,25 +87,64 @@ class HomeScreenLogics {
   /// [getAddressfromCordinates] read data from [cameraMovementProvider] (which is updated whenever the camera moves) and gets the human readable address
   /// from the [cameraMovementProvider] and returns a [Direction] model which is assigned to [pickUpLocationProvider] (which sets the user's pick up Location)
 
+  // void getAddressfromCordinates(BuildContext context, WidgetRef ref) async {
+  //   try {
+  //     if (ref.read(homeScreenCameraMovementProvider) == null) {
+  //       return;
+  //     }
+
+  //     GeoData data = await Geocoder2.getDataFromCoordinates(
+  //         latitude: ref.read(homeScreenCameraMovementProvider)!.latitude,
+  //         longitude: ref.read(homeScreenCameraMovementProvider)!.longitude,
+  //         googleMapApiKey: mapKey);
+
+  //     Direction model = Direction(
+  //         locationLatitude: data.latitude,
+  //         locationLongitude: data.longitude,
+  //         humanReadableAddress: data.address);
+
+  //     ref
+  //         .read(homeScreenPickUpLocationProvider.notifier)
+  //         .update((state) => model);
+  //   } catch (e) {
+  //     if (context.mounted) {
+  //       ErrorNotification().showError(context, "An Error Occurred $e");
+  //     }
+  //   }
+  // }
+
   void getAddressfromCordinates(BuildContext context, WidgetRef ref) async {
     try {
-      if (ref.read(homeScreenCameraMovementProvider) == null) {
-        return;
+      final cameraPosition = ref.read(homeScreenCameraMovementProvider);
+      if (cameraPosition == null) return;
+
+      final placemarks = await placemarkFromCoordinates(
+        cameraPosition.latitude,
+        cameraPosition.longitude,
+      );
+
+      if (placemarks.isEmpty) {
+        throw Exception('No address found');
       }
 
-      GeoData data = await Geocoder2.getDataFromCoordinates(
-          latitude: ref.read(homeScreenCameraMovementProvider)!.latitude,
-          longitude: ref.read(homeScreenCameraMovementProvider)!.longitude,
-          googleMapApiKey: mapKey);
+      final place = placemarks.first;
+      // Build a human-readable address (adjust the format as needed)
+      final address = [
+        place.street,
+        place.subLocality,
+        place.locality,
+        place.administrativeArea,
+        place.postalCode,
+        place.country,
+      ].where((part) => part != null && part.isNotEmpty).join(', ');
 
-      Direction model = Direction(
-          locationLatitude: data.latitude,
-          locationLongitude: data.longitude,
-          humanReadableAddress: data.address);
+      final model = Direction(
+        locationLatitude: cameraPosition.latitude,
+        locationLongitude: cameraPosition.longitude,
+        humanReadableAddress: address,
+      );
 
-      ref
-          .read(homeScreenPickUpLocationProvider.notifier)
-          .update((state) => model);
+      ref.read(homeScreenPickUpLocationProvider.notifier).update((_) => model);
     } catch (e) {
       if (context.mounted) {
         ErrorNotification().showError(context, "An Error Occurred $e");
@@ -286,7 +326,12 @@ class HomeScreenLogics {
                                       print(
                                           "The updated distance is $distanceToDriver");
 
-                                      if (distanceToDriver < 50 && index == ref.watch(homeScreenSelectedRideProvider) && ref.watch(homeScreenStartDriverSearch) ) {
+                                      if (distanceToDriver < 50 &&
+                                          index ==
+                                              ref.watch(
+                                                  homeScreenSelectedRideProvider) &&
+                                          ref.watch(
+                                              homeScreenStartDriverSearch)) {
                                         context.pop();
                                         sendNotificationToUserAboutDriverArrival(
                                             context);
@@ -338,8 +383,6 @@ class HomeScreenLogics {
                                                     homeScreenSelectedRideProvider
                                                         .notifier)
                                                 .update((state) => index);
-
-
                                           },
                                           child: Padding(
                                             padding: const EdgeInsets.all(15.0),
@@ -421,18 +464,24 @@ class HomeScreenLogics {
                                         null
                                     ? null
                                     : () {
-                                      int seletectedDriver = int.parse(ref.read(
-                                            homeScreenSelectedRideProvider).toString());
+                                        int seletectedDriver = int.parse(ref
+                                            .read(
+                                                homeScreenSelectedRideProvider)
+                                            .toString());
                                         ref
                                             .read(homeScreenStartDriverSearch
                                                 .notifier)
                                             .update((state) => true);
 
-                                             ref
-                                                .read(
-                                                    globalFirestoreRepoProvider)
-                                                .addUserRideRequestToDB(
-                                                    context, ref, ref.read(homeScreenAvailableDriversProvider)[seletectedDriver].email);
+                                        ref
+                                            .read(globalFirestoreRepoProvider)
+                                            .addUserRideRequestToDB(
+                                                context,
+                                                ref,
+                                                ref
+                                                    .read(homeScreenAvailableDriversProvider)[
+                                                        seletectedDriver]
+                                                    .email);
 
                                         sendNotificationToDriver(context, ref);
                                       },
